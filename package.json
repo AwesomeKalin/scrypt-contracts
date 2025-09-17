@@ -1,0 +1,63 @@
+{
+  "name": "scrypt-boilerplate",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "watch": "npx scrypt-cli compile --watch",
+    "precompile": "rimraf scrypt.index.json && rimraf artifacts",
+    "compile": "npx scrypt-cli compile --asm",
+    "pretest": "npm run compile",
+    "test": "npm run test:mocha",
+    "test:mocha": "cross-env NETWORK=local mocha -i -f 'Heavy'",
+    "test:all": "npm run pretest && cross-env NETWORK=local mocha --no-timeouts",
+    "test:testnet": "npm run pretest && cross-env NETWORK=testnet mocha -i -f 'Heavy' --no-timeouts",
+    "lint": "eslint . --ext .js,.ts --fix && prettier --write --ignore-unknown \"**/*\"",
+    "lint-check": "eslint . --ext .js,.ts && prettier --check --ignore-unknown \"**/*\"",
+    "prepare": "husky install",
+    "genprivkey": "npx ts-node tests/utils/privateKey.ts"
+  },
+  "lint-staged": {
+    "**/*": [
+      "prettier --write --ignore-unknown"
+    ],
+    "**/*.{ts,js}": [
+      "eslint --cache --fix"
+    ]
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "paillier-bigint": "^3.4.3",
+    "scrypt-ord": "^1.0.17",
+    "scrypt-ts": "^1.4.5",
+    "scrypt-ts-lib": "^0.1.28"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.3.20",
+    "@types/chai-as-promised": "^7.1.8",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^18.19.126",
+    "@typescript-eslint/eslint-plugin": "^5.62.0",
+    "@typescript-eslint/parser": "^5.62.0",
+    "axios": "^1.12.2",
+    "chai": "^4.5.0",
+    "chai-as-promised": "^7.1.2",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.6.1",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^8.10.2",
+    "husky": "^8.0.3",
+    "lint-staged": "^13.3.0",
+    "mocha": "^10.8.2",
+    "prettier": "^2.8.8",
+    "rimraf": "^3.0.2",
+    "scrypt-cli": "^0.1.79",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "trustedDependencies": [
+    "scrypt-ts-transpiler",
+    "scryptlib"
+  ]
+}
