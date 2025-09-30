@@ -10,9 +10,16 @@ import {
     Utils,
     Addr,
     int2ByteString,
+    MethodCallOptions,
+    ContractTransaction,
+    bsv,
 } from 'scrypt-ts';
 import { RabinPubKey, RabinSig, RabinVerifier } from 'scrypt-ts-lib';
 import { TxUtil } from '../txUtil';
+
+import Transaction = bsv.Transaction;
+import { LPHolderBSV } from './holderbsv';
+import { LPHolderBSV21 } from './holderbsv21';
 
 /**
  * Main LP contract.
@@ -231,7 +238,7 @@ export class LPBSV21ToBSV extends BSV20V2 {
 
         // Payout LP Tokens
         outputs += Utils.buildOutput(
-            BSV20V2.createTransferInsciption(this.lpTokenId, this.lpTokenAmt) +
+            BSV20V2.createTransferInsciption(this.lpTokenId, lpTokensToGive) +
                 script,
             1n
         );
@@ -578,5 +585,142 @@ export class LPBSV21ToBSV extends BSV20V2 {
             hash256(outputs) == this.ctx.hashOutputs,
             'hashOutputs mismatch'
         );
+    }
+
+    // Transaction builder for liquidity adding functions
+    static buildTxForAddLiquidity(
+        current: LPBSV21ToBSV,
+        holderBSV: LPHolderBSV,
+        holderLP: LPHolderBSV21,
+        tokenDeposit: Transaction.Input,
+        options: MethodCallOptions<LPBSV21ToBSV>,
+        oracleMsg: ByteString,
+        oracleSig: RabinSig,
+        bsvInputTx: ByteString,
+        script: ByteString
+    ): Promise<ContractTransaction> {
+        const nextInstance = current.next();
+
+        // Update contract values. See actual functions for proper commenting of functionality
+        const tokenOutputTx: ByteString = TxUtil.getPrevoutTxid(
+            nextInstance.prevouts,
+            3n
+        );
+
+        const tokenOutputIdx: bigint = TxUtil.getPrevoutOutputIdx(
+            nextInstance.prevouts,
+            3n
+        );
+
+        const tokenAmt: bigint = LPBSV21ToBSV.verifyTokenMessage(
+            oracleMsg,
+            tokenOutputTx,
+            tokenOutputIdx
+        );
+
+        const bsvIdx: bigint = TxUtil.getPrevoutOutputIdx(
+            nextInstance.prevouts,
+            4n
+        );
+        const bsvValue: bigint = TxUtil.readOutput(bsvInputTx, bsvIdx).satoshis;
+
+        const lpTokensToGive: bigint =
+            ((current.lpTokenMax - current.lpTokenAmt) /
+                current.bsv21TokenAmt) *
+            tokenAmt;
+
+        nextInstance.bsv21TokenAmt += tokenAmt;
+        nextInstance.bsvAmt += bsvValue;
+        nextInstance.lpTokenAmt -= lpTokensToGive;
+
+        const LPHolderBSVnext = new LPHolderBSV(1n);
+        const LPHolderBSV21next = new LPHolderBSV21(
+            nextInstance.lpTokenId,
+            nextInstance.lpTokenSym,
+            nextInstance.lpTokenMax,
+            nextInstance.lpTokenDec,
+            2n
+        );
+
+        // Create unsigned transaction
+        const unsignedTx: Transaction = new Transaction()
+            .addInput(current.buildContractInput())
+            .addInput(holderBSV.buildContractInput())
+            .addInput(holderLP.buildContractInput())
+            .addInput(tokenDeposit)
+            .addOutput(
+                new Transaction.Output({
+                    script: nextInstance.lockingScript,
+                    satoshis: 1,
+                })
+            )
+            .addOutput(
+                new Transaction.Output({
+                    script: LPHolderBSVnext.lockingScript,
+                    satoshis: Number(
+                        nextInstance.bsvAmt + nextInstance.bsvFees
+                    ),
+                })
+            )
+            .addOutput(
+                new Transaction.Output({
+                    script: LPHolderBSV21next.lockingScript,
+                    satoshis: 1,
+                })
+            )
+            .addOutput(
+                new Transaction.Output({
+                    script: new bsv.Script(
+                        BSV20V2.createTransferInsciption(
+                            nextInstance.lpTokenId,
+                            current.lpTokenAmt - nextInstance.lpTokenAmt
+                        ) + script
+                    ),
+                    satoshis: 1,
+                })
+            )
+            .addOutput(
+                new Transaction.Output({
+                    script: bsv.Script.fromHex(
+                        Utils.buildPublicKeyHashScript(current.bsv21TokenFund)
+                    ),
+                    satoshis: 1000,
+                })
+            )
+            .addOutput(
+                new Transaction.Output({
+                    script: bsv.Script.fromHex(
+                        Utils.buildPublicKeyHashScript(current.lpTokenFund)
+                    ),
+                    satoshis: 2000,
+                })
+            );
+
+        if (options.changeAddress) {
+            // build change output
+            unsignedTx.change(options.changeAddress);
+        }
+
+        return Promise.resolve({
+            tx: unsignedTx,
+            atInputIndex: 0,
+            nexts: [
+                {
+                    instance: nextInstance,
+                    atOutputIndex: 0,
+                    balance: 1,
+                },
+                {
+                    instance: LPHolderBSVnext,
+                    atOutputIndex: 1,
+                    balance: Number(nextInstance.bsvAmt + nextInstance.bsvFees),
+                },
+                {
+                    instance: LPHolderBSV21next,
+                    atOutputIndex: 2,
+                    balance: 1,
+                },
+            ],
+        });
     }
 }
