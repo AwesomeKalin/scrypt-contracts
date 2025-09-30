@@ -30,7 +30,7 @@
         "rimraf": "^3.0.2",
         "scrypt-cli": "^0.1.79",
         "ts-node": "^10.9.2",
-        "typescript": "5.3.3",
+        "typescript": "^5.3.3",
       },
     },
   },
