@@ -119,7 +119,7 @@ async function main() {
           `(contract|library) ${contractName}`
         )
       ) {
-        fs.writeFileSync('temp', scryptFile);
+        fs.writeFileSync("temp", scryptFile);
         found = true;
         for (const func of Object.keys(asmFile[contractName])) {
           const asm = asmFile[contractName][func];

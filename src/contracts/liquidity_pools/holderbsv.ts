@@ -1,4 +1,4 @@
-import { assert, ByteString, hash256, method, prop, SmartContract } from 'scrypt-ts';
+import { assert, method, prop, SmartContract } from 'scrypt-ts';
 import { TxUtil } from '../txUtil';
 
 /**
@@ -14,15 +14,15 @@ export class LPHolderBSV extends SmartContract {
         super(...arguments);
         this.pos = pos;
     }
-    
+
     @method()
     public unlock() {
         assert(
             TxUtil.unlockHolder(
-                this.prevouts, 
-                this.ctx.utxo.outpoint.outputIndex, 
-                this.pos, 
-                this.ctx.utxo.outpoint.txid,
+                this.prevouts,
+                this.ctx.utxo.outpoint.outputIndex,
+                this.pos,
+                this.ctx.utxo.outpoint.txid
             )
         );
     }

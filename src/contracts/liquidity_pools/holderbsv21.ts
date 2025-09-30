@@ -11,20 +11,26 @@ export class LPHolderBSV21 extends BSV20V2 {
     @prop(false)
     readonly pos: bigint;
 
-    constructor(id: ByteString, sym: ByteString, max: bigint, dec: bigint, pos: bigint) {
+    constructor(
+        id: ByteString,
+        sym: ByteString,
+        max: bigint,
+        dec: bigint,
+        pos: bigint
+    ) {
         super(id, sym, max, dec);
         this.init(...arguments);
         this.pos = pos;
     }
-    
+
     @method()
     public unlock() {
         assert(
             TxUtil.unlockHolder(
-                this.prevouts, 
-                this.ctx.utxo.outpoint.outputIndex, 
-                this.pos, 
-                this.ctx.utxo.outpoint.txid,
+                this.prevouts,
+                this.ctx.utxo.outpoint.outputIndex,
+                this.pos,
+                this.ctx.utxo.outpoint.txid
             )
         );
     }
