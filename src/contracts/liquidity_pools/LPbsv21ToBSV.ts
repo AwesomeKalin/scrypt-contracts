@@ -253,7 +253,7 @@ export class LPBSV21ToBSV extends BSV20V2 {
 
     // Swap the BSV21 token, using an oracle for token verification
     @method()
-    public swapTokenToBSVOracle(
+    public swapTokenToBSVWithOracle(
         oracleMsg: ByteString,
         oracleSig: RabinSig,
         script: ByteString,
@@ -438,6 +438,138 @@ export class LPBSV21ToBSV extends BSV20V2 {
         // BSV21 Indexing Fund Outputs
         outputs += Utils.buildAddressOutput(this.bsv21TokenFund, 2000n);
         outputs += Utils.buildAddressOutput(this.lpTokenFund, 1000n);
+
+        // Change
+        outputs += this.buildChangeOutput();
+
+        assert(
+            hash256(outputs) == this.ctx.hashOutputs,
+            'hashOutputs mismatch'
+        );
+    }
+
+    // Removes liquidity from the pool, using an oracle to verify tokens
+    @method()
+    public removeLiquidityWithOracle(
+        oracleMsg: ByteString,
+        oracleSig: RabinSig,
+        bsv21Script: ByteString,
+        bsvScript: ByteString
+    ) {
+        // Verify positions
+        assert(
+            this.ctx.utxo.outpoint.outputIndex === 0n,
+            'must be in 0th position'
+        );
+
+        TxUtil.verifyHolders(this.prevouts, this.ctx.utxo.outpoint.txid);
+
+        // Verify token input and get amount of tokens
+        const tokenOutputTx: ByteString = TxUtil.getPrevoutTxid(
+            this.prevouts,
+            3n
+        );
+
+        const tokenOutputIdx: bigint = TxUtil.getPrevoutOutputIdx(
+            this.prevouts,
+            3n
+        );
+
+        assert(
+            RabinVerifier.verifySig(oracleMsg, oracleSig, this.oraclePubKey),
+            'invalid rabin signature'
+        );
+
+        const lpTokenAmt: bigint = LPBSV21ToBSV.verifyTokenMessage(
+            oracleMsg,
+            tokenOutputTx,
+            tokenOutputIdx
+        );
+
+        // Calculate withdrawal amount w/o fees
+        const ratioLpToBSV21: bigint =
+            (this.lpTokenMax - this.lpTokenAmt) / this.bsv21TokenAmt;
+        const bsv21AmtNoFees: bigint = lpTokenAmt * ratioLpToBSV21;
+
+        const ratioBsv21ToBSV: bigint = this.bsvAmt / this.bsv21TokenAmt;
+        const bsvAmtNoFees: bigint = bsv21AmtNoFees * ratioBsv21ToBSV;
+
+        // Calculate with fees
+        const ratioLpToBSV21Fees: bigint =
+            (this.lpTokenMax - this.lpTokenAmt) / this.bsv21Fees;
+        const bsv21FeesAmt: bigint = lpTokenAmt * ratioLpToBSV21Fees;
+
+        const ratioLpToBSVFees: bigint =
+            (this.lpTokenMax - this.lpTokenAmt) / this.bsvFees;
+        const bsvFeesAmt: bigint = lpTokenAmt * ratioLpToBSVFees;
+
+        // Update Values
+        this.bsv21TokenAmt -= bsv21AmtNoFees;
+        this.bsvAmt -= bsvAmtNoFees;
+
+        this.bsv21Fees -= bsv21FeesAmt;
+        this.bsvFees -= bsvFeesAmt;
+
+        this.lpTokenAmt += lpTokenAmt;
+
+        let outputs: ByteString = toByteString('');
+
+        if (this.bsv21TokenAmt === 0n && this.bsvAmt === 0n) {
+            // Payout BSV21 token and BSV
+            outputs += Utils.buildOutput(
+                BSV20V2.createTransferInsciption(
+                    this.id,
+                    bsv21AmtNoFees + bsv21FeesAmt
+                ) + bsv21Script,
+                1n
+            );
+            outputs += Utils.buildOutput(bsvScript, bsvAmtNoFees + bsvFeesAmt);
+
+            // BSV21 Indexing Fund Outputs
+            outputs += Utils.buildAddressOutput(this.bsv21TokenFund, 1000n);
+        } else {
+            // Create outputs
+            outputs += this.buildStateOutputFT(this.bsv21TokenAmt);
+
+            // Holders
+            const bsvHoldScript: ByteString =
+                LPBSV21ToBSV.holderBsvPrefix +
+                int2ByteString(1n) +
+                LPBSV21ToBSV.holderBsvSuffix;
+
+            outputs += Utils.buildOutput(bsvHoldScript, this.bsvAmt);
+
+            const lpHoldScript: ByteString =
+                LPBSV21ToBSV.holderBsv21Prefix +
+                this.lpTokenId +
+                this.lpTokenSym +
+                int2ByteString(this.lpTokenMax) +
+                int2ByteString(this.lpTokenDec) +
+                int2ByteString(2n) +
+                LPBSV21ToBSV.holderBsv21Suffix;
+
+            outputs += Utils.buildOutput(
+                BSV20V2.createTransferInsciption(
+                    this.lpTokenId,
+                    this.lpTokenAmt
+                ) + lpHoldScript,
+                1n
+            );
+
+            // Payout BSV21 token and BSV
+            outputs += Utils.buildOutput(
+                BSV20V2.createTransferInsciption(
+                    this.id,
+                    bsv21AmtNoFees + bsv21FeesAmt
+                ) + bsv21Script,
+                1n
+            );
+            outputs += Utils.buildOutput(bsvScript, bsvAmtNoFees + bsvFeesAmt);
+
+            // BSV21 Indexing Fund Outputs
+            outputs += Utils.buildAddressOutput(this.bsv21TokenFund, 2000n);
+            outputs += Utils.buildAddressOutput(this.lpTokenFund, 1000n);
+        }
 
         // Change
         outputs += this.buildChangeOutput();
